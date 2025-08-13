@@ -1,14 +1,17 @@
-import type { AppProps } from 'next/app'
-import Head from 'next/head'
-import '../styles.css'
+// pages/_app.tsx
+import type { AppProps } from "next/app";
+import { useEffect } from "react";
+import "../styles/globals.css"; // keep if you have tailwind/global styles
 
-export default function MyApp({ Component, pageProps }: AppProps) {
-  return (
-    <>
-      <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </Head>
-      <Component {...pageProps} />
-    </>
-  )
+export default function App({ Component, pageProps }: AppProps) {
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      // register after page load so it doesn’t block TTI
+      const onLoad = () => navigator.serviceWorker.register("/sw.js").catch(() => {});
+      window.addEventListener("load", onLoad);
+      return () => window.removeEventListener("load", onLoad);
+    }
+  }, []);
+
+  return <Component {...pageProps} />;
 }
