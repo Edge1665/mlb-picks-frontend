@@ -1,10 +1,9 @@
 // pages/index.tsx
 import React from "react";
-import MarketTable from "@/components/MarketTable";
+import MarketTable from "../components/MarketTable";
+import { fetchMarkets } from "../lib/api";
 
 type PlayerRow = any;
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
 
 function isoToday() {
   const d = new Date();
@@ -20,31 +19,25 @@ export default function HomePage() {
   const [date, setDate] = React.useState(isoToday());
   const [error, setError] = React.useState<string | null>(null);
 
-  const fetchData = React.useCallback(async () => {
-    if (!API_BASE) {
-      setError("NEXT_PUBLIC_API_BASE not set");
-      setLoading(false);
-      return;
-    }
+  const load = React.useCallback(async () => {
     try {
+      setLoading(true);
       setError(null);
-      const url = `${API_BASE}/markets?date=${date}`;
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setRows(Array.isArray(json) ? json : []);
+      const data = await fetchMarkets(date);
+      setRows(Array.isArray(data) ? data : []);
     } catch (e: any) {
       setError(e?.message || "Failed to fetch");
+      setRows([]);
     } finally {
       setLoading(false);
     }
   }, [date]);
 
   React.useEffect(() => {
-    fetchData();
-    const id = setInterval(fetchData, 5 * 60 * 1000); // refresh every 5 minutes
+    load();
+    const id = setInterval(load, 5 * 60 * 1000); // refresh every 5 min
     return () => clearInterval(id);
-  }, [fetchData]);
+  }, [load]);
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6">
@@ -59,7 +52,7 @@ export default function HomePage() {
             className="rounded-md border border-gray-300 px-2 py-1 text-sm"
           />
           <button
-            onClick={fetchData}
+            onClick={load}
             className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white"
           >
             Refresh
