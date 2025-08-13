@@ -1,0 +1,10 @@
+// public/sw.js
+self.addEventListener("install", (e) => {
+  self.skipWaiting();
+});
+self.addEventListener("activate", (e) => {
+  self.clients.claim();
+});
+self.addEventListener("fetch", () => {
+  // passthrough; you can add caching later
+});
