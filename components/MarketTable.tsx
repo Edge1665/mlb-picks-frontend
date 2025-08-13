@@ -1,65 +1,103 @@
 // components/MarketTable.tsx
-import React from "react";
+import React, { useMemo, useState } from "react";
 
 type Row = {
   playerName: string;
-  team?: string;
+  team: string;
   lineupSpot?: number | null;
 
-  // new, explicit game-level fields (backend aliases)
-  hr_game_prob?: number;  // game-level HR
-  h1_game_prob?: number;  // game-level 1+ hit
-  h2_game_prob?: number;  // game-level 2+ hits
-
-  // legacy names (fallbacks, if aliases not present for any reason)
-  hr_anytime_prob?: number;
-  hits_1plus_prob?: number;
-  hits_2plus_prob?: number;
-
-  // odds & scores
-  fair_hr_american?: number;
-  fair_h1_american?: number;
-  fair_h2_american?: number;
+  hr_game_prob?: number;
+  h1_game_prob?: number;
+  h2_game_prob?: number;
 
   hr_market_odds?: number | null;
   h1_market_odds?: number | null;
   h2_market_odds?: number | null;
 
-  hr_edge?: number | null;
-  h1_edge?: number | null;
-  h2_edge?: number | null;
-
-  hr_score?: number;
-  h1_score?: number;
-  h2_score?: number;
+  hr_score?: number; // 1.0 - 10.0
 };
 
-function pct(n?: number | null) {
-  if (typeof n !== "number") return "—";
-  return `${(n * 100).toFixed(1)}%`;
+function pct(x?: number) {
+  if (typeof x !== "number") return "—";
+  return `${(x * 100).toFixed(1)}%`;
+}
+function dec(x?: number) {
+  if (typeof x !== "number") return "—";
+  return x.toFixed(1);
+}
+function odds(x?: number | null) {
+  if (x === null || typeof x === "undefined") return "—";
+  const v = Number(x);
+  return v > 0 ? `+${v}` : `${v}`;
 }
 
-function odds(n?: number | null) {
-  if (n === null || n === undefined) return "—";
-  return n > 0 ? `+${n}` : `${n}`;
+export default function MarketTable({ rows }: { rows: Row[] }) {
+  const [sortKey, setSortKey] = useState<keyof Row>("hr_score");
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+
+  const sorted = useMemo(() => {
+    const copy = [...rows];
+    copy.sort((a: any, b: any) => {
+      const av = a?.[sortKey] ?? -Infinity;
+      const bv = b?.[sortKey] ?? -Infinity;
+      if (av === bv) return 0;
+      return sortDir === "desc" ? (av > bv ? -1 : 1) : (av < bv ? -1 : 1);
+    });
+    return copy;
+  }, [rows, sortKey, sortDir]);
+
+  function th(label: string, key: keyof Row) {
+    const active = sortKey === key;
+    return (
+      <th
+        onClick={() => {
+          if (active) setSortDir(sortDir === "desc" ? "asc" : "desc");
+          else { setSortKey(key); setSortDir("desc"); }
+        }}
+        style={{ cursor: "pointer", whiteSpace: "nowrap" }}
+      >
+        {label} {active ? (sortDir === "desc" ? "▼" : "▲") : ""}
+      </th>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead>
+          <tr className="text-left border-b">
+            <th>Player</th>
+            <th>Team</th>
+            <th>Lineup</th>
+            {th("HR %", "hr_game_prob")}
+            {th("Score (HR)", "hr_score")}
+            {th("H1 %", "h1_game_prob")}
+            {th("H2 %", "h2_game_prob")}
+            <th>Odds HR</th>
+            <th>Odds 1+H</th>
+            <th>Odds 2+H</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r, i) => (
+            <tr key={i} className="border-b last:border-none">
+              <td>{r.playerName}</td>
+              <td>{r.team}</td>
+              <td>{r.lineupSpot ?? "—"}</td>
+              <td>{pct(r.hr_game_prob)}</td>
+              <td><b>{dec(r.hr_score)}</b></td>
+              <td>{pct(r.h1_game_prob)}</td>
+              <td>{pct(r.h2_game_prob)}</td>
+              <td>{odds(r.hr_market_odds)}</td>
+              <td>{odds(r.h1_market_odds)}</td>
+              <td>{odds(r.h2_market_odds)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
-
-function fmtEdge(n?: number | null) {
-  if (n === null || n === undefined) return "—";
-  const v = (n * 100);
-  const s = v >= 0 ? "+" : "";
-  return `${s}${v.toFixed(1)}%`;
-}
-
-function score(n?: number | null) {
-  if (n === null || n === undefined) return "—";
-  return n.toFixed(1);
-}
-
-type Props = { rows: Row[] };
-
-export default function MarketTable({ rows }: Props) {
-  // Simple sort: by HR score by default
   const [sortKey, setSortKey] = React.useState<keyof Row>("hr_score");
   const [asc, setAsc] = React.useState<boolean>(false);
 
