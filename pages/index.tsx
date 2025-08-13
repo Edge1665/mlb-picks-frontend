@@ -1,53 +1,81 @@
-import { useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
-import { useRouter } from 'next/router'
+// pages/index.tsx
+import React from "react";
+import MarketTable from "@/components/MarketTable";
 
-export default function Home() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [mode, setMode] = useState<'signin'|'signup'>('signin')
-  const [loading, setLoading] = useState(false)
-  const router = useRouter()
+type PlayerRow = any;
 
-  const submit = async (e:any) => {
-    e.preventDefault()
-    setLoading(true)
-    try {
-      if(mode === 'signup'){
-        const { error } = await supabase.auth.signUp({ email, password })
-        if(error) throw error
-        alert('Check your email to confirm.')
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if(error) throw error
-        router.push('/app')
-      }
-    } catch (err:any) {
-      alert(err.message || 'Auth error')
-    } finally {
-      setLoading(false)
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
+
+function isoToday() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export default function HomePage() {
+  const [rows, setRows] = React.useState<PlayerRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [date, setDate] = React.useState(isoToday());
+  const [error, setError] = React.useState<string | null>(null);
+
+  const fetchData = React.useCallback(async () => {
+    if (!API_BASE) {
+      setError("NEXT_PUBLIC_API_BASE not set");
+      setLoading(false);
+      return;
     }
-  }
+    try {
+      setError(null);
+      const url = `${API_BASE}/markets?date=${date}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      setRows(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      setError(e?.message || "Failed to fetch");
+    } finally {
+      setLoading(false);
+    }
+  }, [date]);
+
+  React.useEffect(() => {
+    fetchData();
+    const id = setInterval(fetchData, 5 * 60 * 1000); // refresh every 5 minutes
+    return () => clearInterval(id);
+  }, [fetchData]);
 
   return (
-    <div className="container">
-      <div className="card" style={{maxWidth: 420, margin: '80px auto'}}>
-        <h1 className="title">MLB Picks</h1>
-        <p className="subtitle">Sign {mode === 'signup' ? 'up' : 'in'} to continue</p>
-        <form onSubmit={submit}>
-          <div style={{marginBottom: 12}}>
-            <input className="input" type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required />
-          </div>
-          <div style={{marginBottom: 12}}>
-            <input className="input" type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} required />
-          </div>
-          <button className="btn" disabled={loading} type="submit">{loading ? 'Please wait...' : (mode==='signup'?'Create account':'Sign in')}</button>
-        </form>
-        <hr />
-        <button className="btn" style={{background:'#334155'}} onClick={()=>setMode(mode==='signup'?'signin':'signup')}>
-          {mode==='signup'?'Have an account? Sign in':'New here? Create an account'}
-        </button>
+    <main className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">MLB Picks</h1>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-700">Date:</label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+          />
+          <button
+            onClick={fetchData}
+            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
-    </div>
-  )
+
+      {loading ? (
+        <div className="text-gray-600">Fetching markets…</div>
+      ) : error ? (
+        <div className="text-red-600">Error: {error}</div>
+      ) : rows.length === 0 ? (
+        <div className="text-gray-600">No data for this date.</div>
+      ) : (
+        <MarketTable rows={rows} />
+      )}
+    </main>
+  );
 }
