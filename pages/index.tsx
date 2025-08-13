@@ -14,9 +14,11 @@ export default function Home() {
   const [date, setDate] = useState<string>("");
   const [query, setQuery] = useState("");
   const [onlyStarters, setOnlyStarters] = useState(false);
-  const [topN, setTopN] = useState(200);
+
+  // -1 means "All"
+  const [topN, setTopN] = useState(-1);
   const [topPicksOnly, setTopPicksOnly] = useState(false);
-  const [topPickThreshold, setTopPickThreshold] = useState(8.0); // default: show >=8.0
+  const [topPickThreshold, setTopPickThreshold] = useState(8.0);
 
   useEffect(() => {
     const today = new Date();
@@ -30,6 +32,9 @@ export default function Home() {
         setLoading(true);
         setError(null);
         const data = await fetchMarkets(date);
+        // quick visibility logs (optional)
+        console.log("Fetched rows count:", Array.isArray(data) ? data.length : "not array");
+        console.log("Sample rows:", Array.isArray(data) ? data.slice(0, 5) : data);
         setRows(Array.isArray(data) ? data : []);
       } catch (e: any) {
         setError(e?.message || "Failed to fetch");
@@ -39,14 +44,15 @@ export default function Home() {
     })();
   }, [date]);
 
-  // Frontend filtering layer (keeps the “HUGE list” manageable)
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let r = rows;
     if (onlyStarters) r = r.filter((x) => x.lineupSpot && x.lineupSpot > 0);
     if (q) {
-      r = r.filter((x) =>
-        x.playerName?.toLowerCase().includes(q) || x.team?.toLowerCase().includes(q)
+      r = r.filter(
+        (x) =>
+          x.playerName?.toLowerCase().includes(q) ||
+          x.team?.toLowerCase().includes(q)
       );
     }
     if (topPicksOnly) {
@@ -57,12 +63,18 @@ export default function Home() {
           (typeof x.h2_score === "number" && x.h2_score >= topPickThreshold)
       );
     }
-    return r.slice(0, topN);
+    // Only limit when topN >= 0
+    return topN >= 0 ? r.slice(0, topN) : r;
   }, [rows, query, onlyStarters, topN, topPicksOnly, topPickThreshold]);
 
   const totals = useMemo(() => {
     const n = rows.length;
-    const withOdds = rows.filter((r) => r.hr_market_odds != null || r.h1_market_odds != null || r.h2_market_odds != null).length;
+    const withOdds = rows.filter(
+      (r) =>
+        r.hr_market_odds != null ||
+        r.h1_market_odds != null ||
+        r.h2_market_odds != null
+    ).length;
     return { n, withOdds };
   }, [rows]);
 
@@ -84,7 +96,6 @@ export default function Home() {
       />
 
       <main className="max-w-6xl mx-auto px-4 py-4">
-        {/* Status */}
         <div className="flex items-center gap-3 text-sm mb-3 text-neutral-600 dark:text-neutral-300">
           {loading && <span>Fetching markets…</span>}
           {error && <span className="text-red-600">Error: {error}</span>}
@@ -95,7 +106,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* Table */}
         <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
           <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 text-sm text-neutral-600 dark:text-neutral-300">
             Tip: Click a column header to sort. “Score (HR/1+H/2+H)” is 1.0–10.0 from model & (when available) market edge.
