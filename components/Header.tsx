@@ -92,16 +92,21 @@ export default function Header(props: Props) {
               onChange={(e) => onOnlyStarters(e.target.checked)}
             /> Starters
           </label>
-          <label className="text-sm flex items-center gap-1 text-neutral-700 dark:text-neutral-300">
-            Show
-            <select
-              className="border dark:border-neutral-700 bg-white dark:bg-neutral-900 rounded px-2 py-1"
-              value={topN}
-              onChange={(e) => onTopN(Number(e.target.value))}
-            >
-              {[50, 100, 200, 500, 1000].map(n => <option key={n} value={n}>Top {n}</option>)}
-            </select>
-          </label>
+          // in components/Header.tsx, replace the "Show" <select> block with this:
+<label className="text-sm flex items-center gap-1 text-neutral-700 dark:text-neutral-300">
+  Show
+  <select
+    className="border dark:border-neutral-700 bg-white dark:bg-neutral-900 rounded px-2 py-1"
+    value={topN}
+    onChange={(e) => onTopN(Number(e.target.value))}
+  >
+    <option value={-1}>All</option>
+    {[50, 100, 200, 500, 1000].map((n) => (
+      <option key={n} value={n}>Top {n}</option>
+    ))}
+  </select>
+</label>
+
 
           {/* Top picks toggle + threshold */}
           <label className="text-sm flex items-center gap-1 text-neutral-700 dark:text-neutral-300">
