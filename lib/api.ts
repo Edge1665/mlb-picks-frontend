@@ -6,7 +6,7 @@ export async function fetchMarkets(date?: string) {
   const url = new URL("/markets", base);
   if (date) url.searchParams.set("date", date); // YYYY-MM-DD
 
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`Failed to fetch markets: ${res.status} ${res.statusText}`);
   }
