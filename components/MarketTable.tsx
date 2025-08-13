@@ -1,262 +1,177 @@
 // components/MarketTable.tsx
 import React from "react";
 
-type PlayerRow = {
-  date: string;
-  playerId: number;
+type Row = {
   playerName: string;
-  team: string;
+  team?: string;
   lineupSpot?: number | null;
 
-  hr_anytime_prob: number;
-  hits_1plus_prob: number;
-  hits_2plus_prob: number;
+  // new, explicit game-level fields (backend aliases)
+  hr_game_prob?: number;  // game-level HR
+  h1_game_prob?: number;  // game-level 1+ hit
+  h2_game_prob?: number;  // game-level 2+ hits
 
-  fair_hr_american: number | null;
-  fair_h1_american: number | null;
-  fair_h2_american: number | null;
+  // legacy names (fallbacks, if aliases not present for any reason)
+  hr_anytime_prob?: number;
+  hits_1plus_prob?: number;
+  hits_2plus_prob?: number;
 
-  hr_market_odds: number | null;
-  h1_market_odds: number | null;
-  h2_market_odds: number | null;
+  // odds & scores
+  fair_hr_american?: number;
+  fair_h1_american?: number;
+  fair_h2_american?: number;
 
-  hr_market_prob: number | null;
-  h1_market_prob: number | null;
-  h2_market_prob: number | null;
+  hr_market_odds?: number | null;
+  h1_market_odds?: number | null;
+  h2_market_odds?: number | null;
 
-  hr_edge: number | null;
-  h1_edge: number | null;
-  h2_edge: number | null;
+  hr_edge?: number | null;
+  h1_edge?: number | null;
+  h2_edge?: number | null;
 
-  hr_score: number;
-  h1_score: number;
-  h2_score: number;
-
-  recent_pa?: number;
+  hr_score?: number;
+  h1_score?: number;
+  h2_score?: number;
 };
 
-type Market = "H1" | "H2" | "HR";
-
-function pct(v: number | null | undefined): string {
-  if (v == null) return "—";
-  return `${(v * 100).toFixed(1)}%`;
+function pct(n?: number | null) {
+  if (typeof n !== "number") return "—";
+  return `${(n * 100).toFixed(1)}%`;
 }
 
-function odds(v: number | null | undefined): string {
-  if (v == null) return "—";
-  const sign = v > 0 ? "+" : "";
-  return `${sign}${v}`;
+function odds(n?: number | null) {
+  if (n === null || n === undefined) return "—";
+  return n > 0 ? `+${n}` : `${n}`;
 }
 
-function valueBadge(edge: number | null | undefined): JSX.Element | null {
-  if (edge == null) return null;
-  const edgePct = edge * 100;
-  if (edgePct >= 1.0) {
-    return (
-      <span className="ml-2 inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
-        Value +{edgePct.toFixed(1)}%
-      </span>
-    );
-  }
-  if (edgePct <= -1.0) {
-    return (
-      <span className="ml-2 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
-        -{Math.abs(edgePct).toFixed(1)}%
-      </span>
-    );
-  }
-  return null;
+function fmtEdge(n?: number | null) {
+  if (n === null || n === undefined) return "—";
+  const v = (n * 100);
+  const s = v >= 0 ? "+" : "";
+  return `${s}${v.toFixed(1)}%`;
 }
 
-function marketFields(market: Market) {
-  if (market === "H1") {
-    return {
-      label: "1+ Hit",
-      modelProbKey: "hits_1plus_prob" as const,
-      marketOddsKey: "h1_market_odds" as const,
-      fairOddsKey: "fair_h1_american" as const,
-      marketProbKey: "h1_market_prob" as const,
-      edgeKey: "h1_edge" as const,
-      scoreKey: "h1_score" as const,
-    };
-  }
-  if (market === "H2") {
-    return {
-      label: "2+ Hits",
-      modelProbKey: "hits_2plus_prob" as const,
-      marketOddsKey: "h2_market_odds" as const,
-      fairOddsKey: "fair_h2_american" as const,
-      marketProbKey: "h2_market_prob" as const,
-      edgeKey: "h2_edge" as const,
-      scoreKey: "h2_score" as const,
-    };
-  }
-  // HR
-  return {
-    label: "HR Anytime",
-    modelProbKey: "hr_anytime_prob" as const,
-    marketOddsKey: "hr_market_odds" as const,
-    fairOddsKey: "fair_hr_american" as const,
-    marketProbKey: "hr_market_prob" as const,
-    edgeKey: "hr_edge" as const,
-    scoreKey: "hr_score" as const,
-  };
+function score(n?: number | null) {
+  if (n === null || n === undefined) return "—";
+  return n.toFixed(1);
 }
 
-type Props = {
-  rows: PlayerRow[];
-};
+type Props = { rows: Row[] };
 
 export default function MarketTable({ rows }: Props) {
-  const [market, setMarket] = React.useState<Market>("H1");
-  const [sortKey, setSortKey] = React.useState<string>("score");
-  const [sortDir, setSortDir] = React.useState<"desc" | "asc">("desc");
-  const [query, setQuery] = React.useState("");
+  // Simple sort: by HR score by default
+  const [sortKey, setSortKey] = React.useState<keyof Row>("hr_score");
+  const [asc, setAsc] = React.useState<boolean>(false);
 
-  const f = marketFields(market);
-
-  const displayRows = React.useMemo(() => {
-    let data = rows;
-
-    // filter by name/team
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      data = data.filter(
-        (r) =>
-          r.playerName.toLowerCase().includes(q) ||
-          (r.team || "").toLowerCase().includes(q)
-      );
-    }
-
-    // compute sort value
-    const getSortVal = (r: PlayerRow) => {
-      if (sortKey === "score") return r[f.scoreKey];
-      if (sortKey === "model") return r[f.modelProbKey];
-      if (sortKey === "edge") return r[f.edgeKey] ?? -999;
-      if (sortKey === "market") return r[f.marketProbKey] ?? -999;
-      if (sortKey === "fair") return r[f.fairOddsKey] ?? 999999; // just to group
-      if (sortKey === "pa") return r.recent_pa ?? 0;
-      return r[f.scoreKey];
-    };
-
-    const sorted = [...data].sort((a, b) => {
-      const va = getSortVal(a);
-      const vb = getSortVal(b);
-      if (va == null && vb == null) return 0;
-      if (va == null) return 1;
-      if (vb == null) return -1;
-      return sortDir === "desc" ? (vb as number) - (va as number) : (va as number) - (vb as number);
+  const sorted = React.useMemo(() => {
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      const av = (a[sortKey] as any) ?? -Infinity;
+      const bv = (b[sortKey] as any) ?? -Infinity;
+      if (av < bv) return asc ? -1 : 1;
+      if (av > bv) return asc ? 1 : -1;
+      return 0;
     });
+    return copy;
+  }, [rows, sortKey, asc]);
 
-    return sorted;
-  }, [rows, market, sortKey, sortDir, query]);
+  const getProb = (r: Row, key: "hr" | "h1" | "h2") => {
+    if (key === "hr") return (r.hr_game_prob ?? r.hr_anytime_prob) ?? null;
+    if (key === "h1") return (r.h1_game_prob ?? r.hits_1plus_prob) ?? null;
+    return (r.h2_game_prob ?? r.hits_2plus_prob) ?? null;
+  };
 
   return (
-    <div className="w-full">
-      {/* Controls */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-semibold text-gray-700">Market:</label>
-          <div className="flex items-center gap-2">
-            {(["H1", "H2", "HR"] as Market[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMarket(m)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium border ${
-                  market === m
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                }`}
-              >
-                {m === "H1" ? "1+ Hit" : m === "H2" ? "2+ Hits" : "HR"}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-semibold text-gray-700">Sort by:</label>
-          <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value)}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm"
-          >
-            <option value="score">Score (1–10)</option>
-            <option value="model">Model %</option>
-            <option value="edge">Edge % (vs Market)</option>
-            <option value="market">Market % (implied)</option>
-            <option value="fair">Fair Odds (model)</option>
-            <option value="pa">Recent PA (30d)</option>
-          </select>
-          <button
-            onClick={() => setSortDir(sortDir === "desc" ? "asc" : "desc")}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm"
-            title="Toggle sort direction"
-          >
-            {sortDir === "desc" ? "↓" : "↑"}
-          </button>
-        </div>
-
-        <div className="flex-1 sm:flex-none">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search player or team…"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-        </div>
+    <div className="overflow-x-auto rounded-lg border border-gray-200">
+      <div className="flex items-center gap-2 p-3 text-sm">
+        <span className="text-gray-600">Sort by:</span>
+        <select
+          className="rounded-md border border-gray-300 px-2 py-1"
+          value={String(sortKey)}
+          onChange={(e) => setSortKey(e.target.value as keyof Row)}
+        >
+          <option value="hr_score">HR Score</option>
+          <option value="h1_score">1+ Hit Score</option>
+          <option value="h2_score">2+ Hits Score</option>
+          <option value="hr_game_prob">HR %</option>
+          <option value="h1_game_prob">1+ Hit %</option>
+          <option value="h2_game_prob">2+ Hits %</option>
+          <option value="hr_edge">HR Edge</option>
+          <option value="h1_edge">1+ Hit Edge</option>
+          <option value="h2_edge">2+ Hits Edge</option>
+        </select>
+        <button
+          className="rounded-md border border-gray-300 px-2 py-1"
+          onClick={() => setAsc((v) => !v)}
+          title="Toggle ascending/descending"
+        >
+          {asc ? "Asc" : "Desc"}
+        </button>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-        <table className="min-w-[900px] w-full text-sm">
-          <thead className="bg-gray-50 text-gray-700">
-            <tr>
-              <th className="px-3 py-2 text-left">Player</th>
-              <th className="px-3 py-2 text-left">Team</th>
-              <th className="px-3 py-2 text-center">Lineup</th>
-              <th className="px-3 py-2 text-right">Model %</th>
-              <th className="px-3 py-2 text-right">Market Odds</th>
-              <th className="px-3 py-2 text-right">Fair Odds</th>
-              <th className="px-3 py-2 text-right">Edge</th>
-              <th className="px-3 py-2 text-right">Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayRows.map((r) => {
-              const fields = marketFields(market);
-              const modelP = r[fields.modelProbKey] as number;
-              const marketOdds = r[fields.marketOddsKey] as number | null;
-              const fairOdds = r[fields.fairOddsKey] as number | null;
-              const marketProb = r[fields.marketProbKey] as number | null;
-              const edge = r[fields.edgeKey] as number | null;
-              const score = r[fields.scoreKey] as number;
+      <table className="min-w-full text-sm">
+        <thead className="bg-gray-50 text-left">
+          <tr>
+            <th className="px-3 py-2">Player</th>
+            <th className="px-3 py-2">Team</th>
+            <th className="px-3 py-2">Spot</th>
 
-              return (
-                <tr key={`${r.playerId}-${fields.label}`} className="border-t">
-                  <td className="px-3 py-2">{r.playerName}</td>
-                  <td className="px-3 py-2">{r.team || "—"}</td>
-                  <td className="px-3 py-2 text-center">{r.lineupSpot ?? "—"}</td>
-                  <td className="px-3 py-2 text-right">{pct(modelP)}</td>
-                  <td className="px-3 py-2 text-right">{odds(marketOdds)}</td>
-                  <td className="px-3 py-2 text-right">{fairOdds == null ? "—" : odds(fairOdds)}</td>
-                  <td className="px-3 py-2 text-right">
-                    {marketProb == null || edge == null ? "—" : `${(edge * 100).toFixed(1)}%`}
-                    {valueBadge(edge)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold">{score.toFixed(1)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+            <th className="px-3 py-2">HR %</th>
+            <th className="px-3 py-2">1+ Hit %</th>
+            <th className="px-3 py-2">2+ Hits %</th>
 
-      <p className="mt-3 text-xs text-gray-500">
-        Model % = per-game probability from your model. Market Odds are American odds from books. Fair Odds = model’s implied American odds.
-        Edge = (Model % − Market %) when market is available. Score blends probability, confidence (recent PA), and market edge.
-      </p>
+            <th className="px-3 py-2">Fair HR</th>
+            <th className="px-3 py-2">Fair 1+</th>
+            <th className="px-3 py-2">Fair 2+</th>
+
+            <th className="px-3 py-2">Mkt HR</th>
+            <th className="px-3 py-2">Mkt 1+</th>
+            <th className="px-3 py-2">Mkt 2+</th>
+
+            <th className="px-3 py-2">Edge HR</th>
+            <th className="px-3 py-2">Edge 1+</th>
+            <th className="px-3 py-2">Edge 2+</th>
+
+            <th className="px-3 py-2">Score HR</th>
+            <th className="px-3 py-2">Score 1+</th>
+            <th className="px-3 py-2">Score 2+</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r, i) => {
+            const hr = getProb(r, "hr");
+            const h1 = getProb(r, "h1");
+            const h2 = getProb(r, "h2");
+            return (
+              <tr key={i} className={i % 2 ? "bg-white" : "bg-gray-50/50"}>
+                <td className="px-3 py-2 font-medium">{r.playerName}</td>
+                <td className="px-3 py-2">{r.team || "—"}</td>
+                <td className="px-3 py-2">{r.lineupSpot ?? "—"}</td>
+
+                <td className="px-3 py-2">{pct(hr)}</td>
+                <td className="px-3 py-2">{pct(h1)}</td>
+                <td className="px-3 py-2">{pct(h2)}</td>
+
+                <td className="px-3 py-2">{odds(r.fair_hr_american)}</td>
+                <td className="px-3 py-2">{odds(r.fair_h1_american)}</td>
+                <td className="px-3 py-2">{odds(r.fair_h2_american)}</td>
+
+                <td className="px-3 py-2">{odds(r.hr_market_odds)}</td>
+                <td className="px-3 py-2">{odds(r.h1_market_odds)}</td>
+                <td className="px-3 py-2">{odds(r.h2_market_odds)}</td>
+
+                <td className="px-3 py-2">{fmtEdge(r.hr_edge)}</td>
+                <td className="px-3 py-2">{fmtEdge(r.h1_edge)}</td>
+                <td className="px-3 py-2">{fmtEdge(r.h2_edge)}</td>
+
+                <td className="px-3 py-2">{score(r.hr_score)}</td>
+                <td className="px-3 py-2">{score(r.h1_score)}</td>
+                <td className="px-3 py-2">{score(r.h2_score)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
-
