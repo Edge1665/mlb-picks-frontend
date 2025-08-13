@@ -11,8 +11,7 @@ export default function Home() {
 
   useEffect(() => {
     const today = new Date();
-    const iso = today.toISOString().slice(0, 10);
-    setDate(iso);
+    setDate(today.toISOString().slice(0, 10));
   }, []);
 
   useEffect(() => {
@@ -21,7 +20,7 @@ export default function Home() {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchMarkets(date);
+        const data = await fetchMarkets(date); // <-- passes date
         setRows(Array.isArray(data) ? data : []);
       } catch (e: any) {
         setError(e?.message || "Failed to fetch");
@@ -48,7 +47,6 @@ export default function Home() {
       <MarketTable rows={rows} />
       <p className="text-xs text-neutral-500 mt-3">
         Score (HR) = model probability × confidence + market edge (capped), scaled to 1.0–10.0.
-        Model includes pitcher matchup, park factors, recent form and weather.
       </p>
     </main>
   );
