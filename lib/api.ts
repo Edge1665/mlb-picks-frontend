@@ -10,5 +10,5 @@ export async function fetchMarkets(date?: string) {
   if (!res.ok) {
     throw new Error(`Failed to fetch markets: ${res.status} ${res.statusText}`);
   }
-  return res.json(); // pass through all fields (hr_game_prob, etc.)
+  return res.json(); // pass through everything (hr_game_prob, etc.)
 }
